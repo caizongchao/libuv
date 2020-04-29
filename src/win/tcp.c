@@ -655,6 +655,52 @@ int uv_tcp_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb) {
   return 0;
 }
 
+int uv_tcp_accept_socket(uv_tcp_t * server, SOCKET * client) {
+    uv_tcp_accept_t * req = server->tcp.serv.pending_accepts;
+
+    if( !req ) {
+        /* No valid connections found, so we error out. */
+        return WSAEWOULDBLOCK;
+    }
+
+    if( req->accept_socket == INVALID_SOCKET ) {
+        return WSAENOTCONN;
+    }
+
+    *client = req->accept_socket;
+
+    /* Prepare the req to pick up a new connection */
+    server->tcp.serv.pending_accepts = req->next_pending;
+    req->next_pending = NULL;
+    req->accept_socket = INVALID_SOCKET;
+
+    if( !(server->flags & UV_HANDLE_CLOSING) ) {
+        /* Check if we're in a middle of changing the number of pending accepts. */
+        if( !(server->flags & UV_HANDLE_TCP_ACCEPT_STATE_CHANGING) ) {
+            uv_tcp_queue_accept(server, req);
+        }
+        else {
+            /* We better be switching to a single pending accept. */
+            assert(server->flags & UV_HANDLE_TCP_SINGLE_ACCEPT);
+
+            server->tcp.serv.processed_accepts++;
+
+            if( server->tcp.serv.processed_accepts >= uv_simultaneous_server_accepts ) {
+                server->tcp.serv.processed_accepts = 0;
+                /*
+                 * All previously queued accept requests are now processed.
+                 * We now switch to queueing just a single accept.
+                 */
+                uv_tcp_queue_accept(server, &server->tcp.serv.accept_reqs[0]);
+                server->flags &= ~UV_HANDLE_TCP_ACCEPT_STATE_CHANGING;
+                server->flags |= UV_HANDLE_TCP_SINGLE_ACCEPT;
+            }
+        }
+    }
+
+    return 0;
+}
+
 
 int uv_tcp_accept(uv_tcp_t* server, uv_tcp_t* client) {
   uv_loop_t* loop = server->loop;
