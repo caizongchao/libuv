@@ -45,12 +45,12 @@ int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb) {
   return uv_translate_sys_error(err);
 }
 
-int uv_accept_fd(uv_stream_t * server, intptr_t * fd) {
+int uv_accept_socket(uv_stream_t * server, uv_os_sock_t * sock) {
     int err = ERROR_INVALID_PARAMETER;
 
     switch( server->type ) {
     case UV_TCP:
-        err = uv_tcp_accept_socket((uv_tcp_t *)server, (SOCKET *)fd);
+        err = uv_tcp_accept_socket((uv_tcp_t *)server, (SOCKET *)sock);
         break;
     case UV_NAMED_PIPE:
         // not supported
